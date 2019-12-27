@@ -173,7 +173,6 @@ class glimpse_network(nn.Module):
 
         return g_t
 
-
 class core_network(nn.Module):
     """
         `h_t = relu( fc(h_t_prev) + fc(g_t) )`
@@ -207,7 +206,6 @@ class core_network(nn.Module):
         h_t = F.relu(h1 + h2)
         return h_t
 
-
 class action_network(nn.Module):
     """
     Args
@@ -228,7 +226,6 @@ class action_network(nn.Module):
     def forward(self, h_t):
         a_t = F.log_softmax(self.fc(h_t), dim=1)
         return a_t
-
 
 class location_network(nn.Module):
     """
@@ -263,7 +260,6 @@ class location_network(nn.Module):
         l_t = torch.tanh(l_t)
 
         return mu, l_t
-
 
 class baseline_network(nn.Module):
     """
