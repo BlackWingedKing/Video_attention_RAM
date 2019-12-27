@@ -6,6 +6,7 @@ import cv2
 
 # gpu settings 
 use_cuda = torch.cuda.is_available()
+print('gpu status ===',use_cuda)
 torch.cuda.manual_seed(0)
 device = torch.device("cuda" if use_cuda else "cpu")
 
