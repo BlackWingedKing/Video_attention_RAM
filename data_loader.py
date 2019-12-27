@@ -32,15 +32,15 @@ class Path(object):
     def db_dir(database):
         if database == 'ucf101':
             # folder that contains class labels
-            root_dir = '/Path/to/UCF-101'
+            root_dir = "../data/ucf11/action_youtube_naudio"
 
             # Save preprocess data into output_dir
-            output_dir = '/path/to/VAR/ucf101'
+            output_dir = "../data/ucf11/out"
 
             return root_dir, output_dir
         elif database == 'hmdb51':
             # folder that contains class labels
-            root_dir = '/Path/to/hmdb-51'
+            root_dir = '../data/ucf11/action_youtube_naudio'
 
             output_dir = '/path/to/VAR/hmdb51'
 
@@ -66,11 +66,11 @@ class VideoDataset(Dataset):
     """
 
     # /home/dipesh/Ram/ritesh/data/ucf11/action_youtube_naudio
-    def __init__(self, dataset='../data/ucf11', split='action_youtube_naudio', clip_len=16, preprocess=False):
+    def __init__(self, dataset='ucf101', split='action_youtube_naudio', clip_len=16, preprocess=False):
         self.root_dir, self.output_dir = Path.db_dir(dataset)
         # folder = os.path.join(self.output_dir, split)
         
-        folder = "../data/ucf11/action_youtube_naudio"
+        folder = "../data/ucf11/out"
         self.clip_len = clip_len
         self.split = split
 
@@ -291,7 +291,7 @@ class VideoDataset(Dataset):
 
 if __name__ == "__main__":
     from torch.utils.data import DataLoader
-    train_data = VideoDataset(dataset='ucf101', split='test', clip_len=8, preprocess=False)
+    train_data = VideoDataset(dataset='ucf101', split='action_youtube_naudio', clip_len=8, preprocess=False)
     train_loader = DataLoader(train_data, batch_size=100, shuffle=True, num_workers=4)
 
     for i, sample in enumerate(train_loader):
