@@ -6,7 +6,7 @@ import cv2
 
 # gpu settings 
 use_cuda = torch.cuda.is_available()
-torch.cuda.manual_seed(config.random_seed)
+torch.cuda.manual_seed(0)
 device = torch.device("cuda" if use_cuda else "cpu")
 
 class retina(object):
@@ -16,18 +16,15 @@ class retina(object):
       of images.
     - t: a 2D tensor of shape (B, 1). Contains normalized
       timestep in the range [-1, 1].
-    - g: no. of flow vectors in first glimpse patch.
-      ****g is an even number by default 2****
     - k: number of glimpse patches.
     - s: skipping factor that controls the size of
       successive patches.
       ****s is 1 by default****
     Returns
     -------
-    - phi: a 5D tensor of shape (B, k*g, H, W, 2).
+    - phi: a 5D tensor of shape (B, k*2, H, W, 2).
     """
-    def __init__(self, g, k, s):
-        self.g = g
+    def __init__(self, k, s):
         self.k = k
         self.s = s
 
@@ -39,94 +36,57 @@ class retina(object):
         k no of patches 
         s skipping factor
 
-        The `k` patches are finally resized to (g*k, ) and
-        concatenated into a tensor of shape (B, k*g, H, W, C).
+        The `k` patches are finally resized to (g*2, ) and
+        concatenated into a tensor of shape (B, k*2, H, W, C).
         """
         phi = []
-        skip = self.s
 
-        # extract k patches of increasing skip
-        for i in range(self.k):
-            # change here 
-            phi.append(self.extract_patch(x, l, self.g, skip))
-            skip = int(self.s + skip)
+        # extract 2*k patches from the loc list
+        B, T, H, W, C = x.shape        
+        lv = self.denormalize(T,l)
+        loc = torch.arange(lv-self.k*self.s, lv+self.k*self.s+1, step=self.s)
+        for i in loc:
+            if(i != lv):
+                phi.append(self.extract_patch(x, lv, i))
 
         # concatenate into a single tensor and flatten
         phi = torch.cat(phi, dim=1)
         return phi
 
-    def extract_patch(self, x, l, g, skip):
+    def extract_patch(self, x, a, b):
         """
         Extract a single set of flow vectors for the given x vector.
-
+        between indices a,b
         Args
         ----
         - x: a 5D Tensor of shape (B, T, H, W, C). The minibatch
           of images.
-        - l: a 2D Tensor of shape (B, 1).
-        - skip: a scalar defining the skip value.
+        - a: a 2D Tensor of shape (B, 1).
+        - b: a 2D Tensor of shape (B, 1).
 
         Returns
         -------
-        - patch: a 5D Tensor of shape (B, g, H, W, 2)
+        - patch: a 5D Tensor of shape (B, 1, H, W)
         """
-        B, T, H, W, C = x.shape
-
-        # denormalize coords of patch center
-        coords = self.denormalize(T, l)
-
-        # compute top left corner of patch
-        patch_t = coords[:, 0]
-        
         # loop through mini-batch and extract
+        B, T, H, W, C = x.shape        
         patch = []
         for i in range(B):
+            im = x[i]
+            a,b = self.exceed(a,b,T)
 
-            im = x[i].unsqueeze(dim=0)
-            patch_t[i] = self.exceed(patch_t[i],g,skip,T)
-
-            # compute slice indices
-            from_t, to_t = patch_t[i] - skip*(g//2), patch_t[i] + skip*(g//2)
-
-            # cast to ints
-            from_t, to_t = from_t.item(), to_t.item()
-            middle_t = (from_t + to_t)//2
-
-            # now since we got these compute the optical flow
-            # convert the numpy arrays to cv images
-
-            leftframe = (im[0,from_t,:,:,:]).cpu()
-            middleframe = (im[0,middle_t,:,:,:]).cpu()
-            rightframe = (im[0,to_t,:,:,:]).cpu()
+            leftframe = (im[0,a,:,:,:]).cpu()
+            rightframe = (im[0,b,:,:,:]).cpu()
 
             leftframe = leftframe.numpy()
-            middleframe = middleframe.numpy()
             rightframe = rightframe.numpy()
 
-            leftframe = cv2.cvtColor(leftframe, cv2.COLOR_RGB2BGR)
-            middleframe = cv2.cvtColor(middleframe, cv2.COLOR_RGB2BGR)
-            rightframe = cv2.cvtColor(rightframe, cv2.COLOR_RGB2BGR)
-
-            leftgray = cv2.cvtColor(leftframe, cv2.COLOR_BGR2GRAY)
-            middlegray = cv2.cvtColor(leftframe, cv2.COLOR_BGR2GRAY)
-            rightgray = cv2.cvtColor(leftframe, cv2.COLOR_BGR2GRAY)
+            leftgray = cv2.cvtColor(leftframe, cv2.COLOR_RGB2GRAY)
+            rightgray = cv2.cvtColor(leftframe, cv2.COLOR_RGB2GRAY)
 
             # compute the flow
-            flow1 = cv2.calcOpticalFlowFarneback(leftgray, middlegray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
-            flow2 = cv2.calcOpticalFlowFarneback(middlegray, rightgray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
-
-            flow1 = np.asarray(flow1)
-            flow2 = np.asarray(flow2)
-
-            flow = np.stack((flow1,flow2),axis=0)
-
-            flow = torch.tensor(flow)
-            
-            if(config.use_gpu):
-              flow = flow.to(device)
-            else:
-              flow = flow.cpu()
-            
+            flow = cv2.calcOpticalFlowFarneback(leftgray, rightgray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+            flow = torch.tensor(flow).to(device)
             patch.append(flow)
 
         # concatenate into a single tensor
@@ -141,19 +101,12 @@ class retina(object):
         """
         return (0.5 * ((coords + 1.0) * T)).long()
 
-    def exceed(self, patch_t, g, skip, T):
-        left = patch_t - skip*(g//2)
-        right = patch_t + skip*(g//2) 
-        if (left < 0):
-            a = skip*(g//2) + 1
-            return a
-        elif(right >= T):
-            a = T-2-skip*(g//2)
-            return a
-        else:
-          return patch_t
-
-
+    def exceed(self, a, b, T):
+        if(a<0):
+            a = 0
+        if(b>T):
+            b = T-1
+        return a,b
 
 class glimpse_network(nn.Module):
     """
