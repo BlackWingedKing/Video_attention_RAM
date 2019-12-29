@@ -11,11 +11,13 @@ class Path(object):
     @staticmethod
     def db_dir(database):
         if database == 'ucf101':
+
             # folder that contains class labels
-            root_dir = "../data/ucf11/action_youtube_naudio"
+            # /home/dipesh/Ram/ritesh/data/UCF-101/UCF-101
+            root_dir = "../data/UCF-101/UCF-101"
 
             # Save preprocess data into output_dir
-            output_dir = "../data/ucf11/out"
+            output_dir = "../data/UCF-101/out"
 
             return root_dir, output_dir
         elif database == 'hmdb51':
@@ -81,8 +83,8 @@ class VideoDataset(Dataset):
         self.label_array = np.array([self.label2index[label] for label in labels], dtype=int)
 
         if dataset == "ucf101":
-            if not os.path.exists('dataloaders/ucf_labels.txt'):
-                with open('dataloaders/ucf_labels.txt', 'w') as f:
+            if not os.path.exists('ucf_labels.txt'):
+                with open('ucf_labels.txt', 'w') as f:
                     for id, label in enumerate(sorted(self.label2index)):
                         f.writelines(str(id+1) + ' ' + label + '\n')
 
@@ -188,11 +190,11 @@ class VideoDataset(Dataset):
 
         # Make sure splited video has at least 16 frames
         EXTRACT_FREQUENCY = 4
-        if frame_count // EXTRACT_FREQUENCY <= 16:
+        if frame_count // EXTRACT_FREQUENCY <= 30:
             EXTRACT_FREQUENCY -= 1
-            if frame_count // EXTRACT_FREQUENCY <= 16:
+            if frame_count // EXTRACT_FREQUENCY <= 30:
                 EXTRACT_FREQUENCY -= 1
-                if frame_count // EXTRACT_FREQUENCY <= 16:
+                if frame_count // EXTRACT_FREQUENCY <= 30:
                     EXTRACT_FREQUENCY -= 1
 
         count = 0
@@ -262,13 +264,9 @@ class VideoDataset(Dataset):
 
         return buffer
 
-
-
-
-
 if __name__ == "__main__":
     from torch.utils.data import DataLoader
-    train_data = VideoDataset(dataset='ucf101', split='test', clip_len=8, preprocess=False)
+    train_data = VideoDataset(dataset='ucf101', split='train', clip_len=30, preprocess=True)
     train_loader = DataLoader(train_data, batch_size=100, shuffle=True, num_workers=4)
 
     for i, sample in enumerate(train_loader):
