@@ -13,7 +13,7 @@ device = torch.device("cuda" if use_cuda else "cpu")
 class retina(object):
     """
     inputs 
-    - x: a 5D tensor of shape (B, T, H, W, C). The minibatch
+    - x: a 5D tensor of shape (B, T, C, H, W). The minibatch
       of images.
     - t: a 2D tensor of shape (B, 1). Contains normalized
       timestep in the range [-1, 1].
@@ -23,7 +23,7 @@ class retina(object):
       ****s is 1 by default****
     Returns
     -------
-    - phi: a 5D tensor of shape (B, k*2, H, W, 2).
+    - phi: a 5D tensor of shape (B, k*2, H, W).
     """
     def __init__(self, k, s):
         self.k = k
@@ -38,7 +38,7 @@ class retina(object):
         s skipping factor
 
         The `k` patches are finally resized to (g*2, ) and
-        concatenated into a tensor of shape (B, k*2, H, W, C).
+        concatenated into a tensor of shape (B, 1, k*2, H, W).
         """
         phi = []
 
@@ -52,7 +52,7 @@ class retina(object):
 
         # concatenate into a single tensor and flatten
         phi = torch.cat(phi, dim=1)
-        return phi
+        return phi.unsqueeze(1)
 
     def extract_patch(self, x, a, b):
         """
@@ -60,7 +60,7 @@ class retina(object):
         between indices a,b
         Args
         ----
-        - x: a 5D Tensor of shape (B, T, H, W, C). The minibatch
+        - x: a 5D Tensor of shape (B, T, C, H, W). The minibatch
           of images.
         - a: a 2D Tensor of shape (B, 1).
         - b: a 2D Tensor of shape (B, 1).
@@ -117,15 +117,12 @@ class glimpse_network(nn.Module):
     ----
     - h_g: hidden layer size of the fc layer for `phi`.
     - h_l: hidden layer size of the fc layer for `l`.
-    - g: size of the square patches in the glimpses extracted
-      by the retina.
     - k: number of patches to extract per glimpse.
-    - s: scaling factor that controls the size of successive patches.
-    - c: number of channels in each image.
-    - x: a 4D Tensor of shape (B, H, W, C). The minibatch
+    - s: skip factor.
+    - x: a 5D Tensor of shape (B, 1, D, H, W). The minibatch
       of images.
-    - l_t_prev: a 2D tensor of shape (B, 2). Contains the glimpse
-      coordinates [x, y] for the previous timestep `t-1`.
+    - l_t_prev: a 2D tensor of shape (B, 1). Contains the time
+      frame t.
 
     Returns
     -------
@@ -133,13 +130,12 @@ class glimpse_network(nn.Module):
       representation returned by the glimpse network for the
       current timestep `t`.
     """
-    def __init__(self, h_g, h_l, g, k, s, c, H, W):
+    def __init__(self, h_g, h_l, k, s, H, W):
         super(glimpse_network, self).__init__()
-
-        self.retina = retina(g, k, s)
+        self.retina = retina(k, s)
 
         # glimpse layer
-        self.conv1 = nn.Conv3d(g*k,1,(20,20,2),stride = (5,5,1))
+        self.conv1 = nn.Conv3d()
         Din = 33*21
         self.fc1 = nn.Linear(Din, 256)
         self.fhc1 = nn.Linear(256, h_g)
@@ -153,7 +149,6 @@ class glimpse_network(nn.Module):
 
         self.bn1 = nn.BatchNorm1d(h_g)
         self.bn2 = nn.BatchNorm1d(h_l)
-
 
     def forward(self, x, l_t_prev):
         # generate glimpse phi from image x
