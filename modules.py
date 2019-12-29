@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import cv2
+from c3d_model import C3D
 
 # gpu settings 
 use_cuda = torch.cuda.is_available()
@@ -43,7 +44,7 @@ class retina(object):
         phi = []
 
         # extract 2*k patches from the loc list
-        B, T, H, W, C = x.shape        
+        B, C, T, H, W = x.shape        
         lv = self.denormalize(T,l)
         loc = torch.arange(lv-self.k*self.s, lv+self.k*self.s+1, step=self.s)
         for i in loc:
@@ -70,7 +71,7 @@ class retina(object):
         - patch: a 5D Tensor of shape (B, 1, H, W)
         """
         # loop through mini-batch and extract
-        B, T, H, W, C = x.shape        
+        B, C, T, H, W = x.shape        
         patch = []
         for i in range(B):
             im = x[i]
@@ -130,44 +131,28 @@ class glimpse_network(nn.Module):
       representation returned by the glimpse network for the
       current timestep `t`.
     """
-    def __init__(self, h_g, h_l, k, s, H, W):
+    def __init__(self, k, s=1):
         super(glimpse_network, self).__init__()
         self.retina = retina(k, s)
-
-        # glimpse layer
-        self.conv1 = nn.Conv3d()
-        Din = 33*21
-        self.fc1 = nn.Linear(Din, 256)
-        self.fhc1 = nn.Linear(256, h_g)
-
-        # location layer
-        D_in = 1
-        self.fc2 = nn.Linear(D_in, h_l)
-
-        self.fc3 = nn.Linear(h_g, h_g+h_l)
-        self.fc4 = nn.Linear(h_l, h_g+h_l)
-
-        self.bn1 = nn.BatchNorm1d(h_g)
-        self.bn2 = nn.BatchNorm1d(h_l)
+        self.c3d = C3D(101,pretrained=False)
 
     def forward(self, x, l_t_prev):
         # generate glimpse phi from image x
         phi = self.retina.foveate(x, l_t_prev)
-        phi = self.conv1(phi)
-        phi = phi.view(phi.shape[0],-1)
+        phi = self.c3d(phi)
+        # phi = self.conv1(phi)
+        # phi = phi.view(phi.shape[0],-1)
         
-        
-        # flatten location vector
-        l_t_prev = l_t_prev.view(l_t_prev.size(0), -1)
+        # # flatten location vector
+        # l_t_prev = l_t_prev.view(l_t_prev.size(0), -1)
 
-        # feed phi and l to respective fc layers
-        phi_out = F.relu(self.bn1(self.fhc1(self.fc1(phi))))
-        l_out = F.relu(self.bn2(self.fc2(l_t_prev)))
+        # # feed phi and l to respective fc layers
+        # phi_out = F.relu(self.bn1(self.fhc1(self.fc1(phi))))
+        # l_out = F.relu(self.bn2(self.fc2(l_t_prev)))
 
-        # feed to fc layer
-        g_t = F.relu(self.fc3(phi_out) + self.fc4(l_out))
-
-        return g_t
+        # # feed to fc layer
+        # g_t = F.relu(self.fc3(phi_out) + self.fc4(l_out))
+        return phi
 
 class core_network(nn.Module):
     """
@@ -188,18 +173,12 @@ class core_network(nn.Module):
     - h_t: a 2D tensor of shape (B, hidden_size). The hidden
       state vector for the current timestep `t`.
     """
-    def __init__(self, input_size, hidden_size):
+    def __init__(self):
         super(core_network, self).__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
+        self.lstm = nn.LSTMCell(4096, 1024)
 
-        self.i2h = nn.Linear(input_size, hidden_size)
-        self.h2h = nn.Linear(hidden_size, hidden_size)
-
-    def forward(self, g_t, h_t_prev):
-        h1 = self.i2h(g_t)
-        h2 = self.h2h(h_t_prev)
-        h_t = F.relu(h1 + h2)
+    def forward(self,x, h_t_prev):
+        h_t = self.lstm(x, h_t_prev)
         return h_t
 
 class action_network(nn.Module):
@@ -215,9 +194,9 @@ class action_network(nn.Module):
     -------
     - a_t: output probability vector over the classes.
     """
-    def __init__(self, input_size, output_size):
+    def __init__(self):
         super(action_network, self).__init__()
-        self.fc = nn.Linear(input_size, output_size)
+        self.fc = nn.Linear(1024, 101)
 
     def forward(self, h_t):
         a_t = F.log_softmax(self.fc(h_t), dim=1)
@@ -238,10 +217,10 @@ class location_network(nn.Module):
     - mu: a 2D vector of shape (B, 1).
     - l_t: a 2D vector of shape (B, 1).
     """
-    def __init__(self, input_size, output_size, std):
+    def __init__(self, std):
         super(location_network, self).__init__()
         self.std = std
-        self.fc = nn.Linear(input_size, output_size)
+        self.fc = nn.Linear(1024, 1)
 
     def forward(self, h_t):
         # compute mean
@@ -274,9 +253,9 @@ class baseline_network(nn.Module):
     - b_t: a 2D vector of shape (B, 1). The baseline
       for the current time step `t`.
     """
-    def __init__(self, input_size, output_size):
+    def __init__(self):
         super(baseline_network, self).__init__()
-        self.fc = nn.Linear(input_size, output_size)
+        self.fc = nn.Linear(1024, 1)
 
     def forward(self, h_t):
         b_t = F.relu(self.fc(h_t.detach()))

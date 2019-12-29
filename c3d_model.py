@@ -43,57 +43,43 @@ class C3D(nn.Module):
     def forward(self, x):
 
         x = self.relu(self.conv1(x))
-        print(x.shape)
         x = self.pool1(x)
-        print(x.shape)
 
         x = self.relu(self.conv2(x))
-        print(x.shape)
 
         x = self.pool2(x)
-        print(x.shape)
 
         x = self.relu(self.conv3a(x))
-        print(x.shape)
 
         x = self.relu(self.conv3b(x))
-        print(x.shape)
 
         x = self.pool3(x)
-        print(x.shape)
 
         x = self.relu(self.conv4a(x))
-        print(x.shape)
 
         x = self.relu(self.conv4b(x))
-        print(x.shape)
 
         x = self.pool4(x)
-        print(x.shape)
 
         x = self.relu(self.conv5a(x))
-        print(x.shape)
 
         x = self.relu(self.conv5b(x))
-        print(x.shape)
 
         x = self.pool5(x)
-        print(x.shape)
 
         x = x.view(-1, 8192)
         x = self.relu(self.fc6(x))
-        print(x.shape)
 
         x = self.dropout(x)
-        print(x.shape)
 
-        x = self.relu(self.fc7(x))
-        print(x.shape)
-        x = self.dropout(x)
+        return self.fc7(x)
+        
+        # x = self.relu(self.fc7(x))
+        # x = self.dropout(x)
 
-        logits = self.fc8(x)
+        # logits = self.fc8(x)
 
-        return logits
+        # return logits
 
     def __load_pretrained_weights(self):
         """Initialiaze network."""
@@ -174,4 +160,3 @@ if __name__ == "__main__":
     net = C3D(num_classes=101, pretrained=False )
 
     outputs = net.forward(inputs)
-    print(outputs.size())

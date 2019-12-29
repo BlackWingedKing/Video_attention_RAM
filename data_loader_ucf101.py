@@ -17,7 +17,7 @@ class Path(object):
             root_dir = "../data/UCF-101/UCF-101"
 
             # Save preprocess data into output_dir
-            output_dir = "../data/UCF-101/out"
+            output_dir = "../data/UCF-101/split_UCF101"
 
             return root_dir, output_dir
         elif database == 'hmdb51':
@@ -264,16 +264,16 @@ class VideoDataset(Dataset):
 
         return buffer
 
-if __name__ == "__main__":
-    from torch.utils.data import DataLoader
-    train_data = VideoDataset(dataset='ucf101', split='train', clip_len=30, preprocess=True)
-    train_loader = DataLoader(train_data, batch_size=100, shuffle=True, num_workers=4)
+# if __name__ == "__main__":
+    # from torch.utils.data import DataLoader
+    # train_data = VideoDataset(dataset='ucf101', split='train', clip_len=30, preprocess=False)
+    # train_loader = DataLoader(train_data, batch_size=100, shuffle=True, num_workers=4)
 
-    for i, sample in enumerate(train_loader):
-        inputs = sample[0]
-        labels = sample[1]
-        print(inputs.size())
-        print(labels)
+    # for i, sample in enumerate(train_loader):
+    #     inputs = sample[0]
+    #     labels = sample[1]
+    #     print(inputs.size())
+    #     print(labels)
 
-        if i == 1:
-            break
+    #     if i == 1:
+    #         break

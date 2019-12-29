@@ -10,60 +10,63 @@ import math
 import argparse
 # local imports
 from model import VRAM
-from data_loader import *
+from data_loader import VideoDataset
+from torch.utils.data import DataLoader
 
-def train(model, device, optimiser, epochs, train_loader):
+# gpu settings 
+use_cuda = torch.cuda.is_available()
+print('gpu status ===',use_cuda)
+torch.cuda.manual_seed(0)
+device = torch.device("cuda" if use_cuda else "cpu")
+
+def init(B, T, k):
+    # T is the time frames usually 30 and 
+    # k is the number of glimpses
+    h_t = torch.randn(B, 1024).to(device)
+    l_t = 2*(k/T) - 1.0
+    return h_t, l_t
+
+def train(model, device, optimiser, epochs, train_loader, val_loader):
+    m = 10
+    k = 3
+    ng = 3
     for e in range(epochs):
         for i,sample in enumerate(train_loader):
             x = sample[0].to(device)
             y = sample[1].to(device)
             x = x.repeat(m,1,1,1,1)
-            h_t, l_t = self.init()
+            B,C,T,H,W = x.shape
+            h_t, l_t = init(B, T, k)
+
             # extract the glimpses
-            locs = []
-            log_pi = []
-            baselines = []
-            for t in range(self.num_glimpses - 1):
+            locs,log_pi,baselines = [],[],[]
+
+            for t in range(ng - 1):
                 # forward pass through model
-                h_t, l_t, b_t, p = self.model(x, l_t, h_t)
-                # store
-                locs.append(l_t)
-                baselines.append(b_t)
-                log_pi.append(p)
-
+                h_t, l_t, b_t, p = model(x, l_t, h_t)
+                locs.append(l_t), baselines.append(b_t), log_pi.append(p)
             # last iteration
-            h_t, l_t, b_t, log_probas, p = self.model(
-                x, l_t, h_t, last=True
-            )
-
-            log_pi.append(p)
-            baselines.append(b_t)
-            locs.append(l_t)
+            h_t, l_t, b_t, log_probas, p = model(x, l_t, h_t, last=True)
+            locs.append(l_t), baselines.append(b_t), log_pi.append(p)
 
             # convert list to tensors and reshape
             baselines = torch.stack(baselines).transpose(1, 0)
             log_pi = torch.stack(log_pi).transpose(1, 0)
 
             # average
-            log_probas = log_probas.view(
-                self.M, -1, log_probas.shape[-1]
-            )
+            log_probas = log_probas.view(m, -1, log_probas.shape[-1])
             log_probas = torch.mean(log_probas, dim=0)
 
-            baselines = baselines.contiguous().view(
-                self.M, -1, baselines.shape[-1]
-            )
+            baselines = baselines.contiguous().view(m, -1, baselines.shape[-1])
             baselines = torch.mean(baselines, dim=0)
 
-            log_pi = log_pi.contiguous().view(
-                self.M, -1, log_pi.shape[-1]
-            )
+            log_pi = log_pi.contiguous().view(m, -1, log_pi.shape[-1])
             log_pi = torch.mean(log_pi, dim=0)
 
             # calculate reward
             predicted = torch.max(log_probas, 1)[1]
             R = (predicted.detach() == y).float()
-            R = R.unsqueeze(1).repeat(1, self.num_glimpses)
+            R = R.unsqueeze(1).repeat(1, ng)
 
             # compute losses for differentiable modules
             loss_action = F.nll_loss(log_probas, y)
@@ -131,7 +134,13 @@ def main():
     LR = args.LR
     model = VRAM().to(device)
     optimiser = optim.Adam(model.parameters(), lr=LR)
-    train(model, device, optimiser, nepochs, train_loader)
+
+    train_data = VideoDataset(dataset='ucf101', split='train', clip_len=30, preprocess=False)
+    val_data = VideoDataset(dataset='ucf101', split='val', clip_len=30, preprocess=False)
+    train_loader = DataLoader(train_data, batch_size=32, shuffle=True, num_workers=4)
+    val_loader = DataLoader(val_data, batch_size=32, shuflle=True, num_workers=4)
+
+    train(model, device, optimiser, nepochs, train_loader, val_loader)
 
 if __name__ == '__main__':
     main()

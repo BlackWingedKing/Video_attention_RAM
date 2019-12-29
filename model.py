@@ -10,20 +10,15 @@ from modules import glimpse_network, core_network
 from modules import action_network, location_network
 
 class VRAM(nn.Module):
-    def __init__(self,g,k,s,c,
-                 h_g,
-                 h_l,
-                 std,
-                 hidden_size,
-                 H,W,num_classes):
+    def __init__(self):
         super(VRAM, self).__init__()
-        
+
         self.std = std
-        self.sensor = glimpse_network(h_g, h_l, g, k, s, c, H, W)
-        self.rnn = core_network(hidden_size, hidden_size)
-        self.locator = location_network(hidden_size, 1, std)
-        self.classifier = action_network(hidden_size, num_classes)
-        self.baseliner = baseline_network(hidden_size, 1)
+        self.sensor = glimpse_network(3)
+        self.rnn = core_network()
+        self.locator = location_network(std=0.2)
+        self.classifier = action_network()
+        self.baseliner = baseline_network()
 
     def forward(self, x, l_t_prev, h_t_prev, last=False):
         """
@@ -65,7 +60,7 @@ class VRAM(nn.Module):
         h_t = self.rnn(g_t, h_t_prev)
         mu, l_t = self.locator(h_t)
         b_t = self.baseliner(h_t).squeeze(dim=1)
-        #b_t = self.baseliner(h_t)
+        # b_t = self.baseliner(h_t)
         # we assume both dimensions are independent
         # 1. pdf of the joint is the product of the pdfs
         # 2. log of the product is the sum of the logs
