@@ -45,11 +45,10 @@ class retina(object):
         # extract 2*k patches from the loc list
         B, C, T, H, W = x.shape        
         lv = self.denormalize(T,l)
-        
-        loc = torch.arange((lv-self.k*self.s).item(), (lv+self.k*self.s+1).item(), step=self.s)
-        for i in loc:
-            if(i != lv):
-                phi.append(self.extract_patch(x, lv, i))
+        start = lv -self.k*self.s
+        for i in range(2*self.k+1):
+            if(i != self.k):
+                phi.append(self.extract_patch(x, lv, start+i*self.k))
 
         # concatenate into a single tensor and flatten
         phi = torch.stack(phi, dim=1)
@@ -75,9 +74,9 @@ class retina(object):
         patch = []
         for i in range(B):
             im = x[i]
-            a,b = self.exceed(a,b,T)
-            leftframe = (im[:,a,:,:]).cpu().permute(1,2,0)
-            rightframe = (im[:,b,:,:]).cpu().permute(1,2,0)
+            v1,v2 = self.exceed(a[i].item(),b[i].item(),T)
+            leftframe = (im[:,v1,:,:]).cpu().permute(1,2,0)
+            rightframe = (im[:,v2,:,:]).cpu().permute(1,2,0)
 
             leftframe = leftframe.numpy()
             rightframe = rightframe.numpy()
@@ -105,7 +104,7 @@ class retina(object):
     def exceed(self, a, b, T):
         if(a<0):
             a = 0
-        if(b>T):
+        if(b>=T):
             b = T-1
         return a,b
 
@@ -133,7 +132,7 @@ class glimpse_network(nn.Module):
     def __init__(self, k, s=1):
         super(glimpse_network, self).__init__()
         self.retina = retina(k, s)
-        self.c3d = C3D(101,pretrained=False)
+        self.c3d = C3D(3,pretrained=False)
 
     def forward(self, x, l_t_prev):
         # generate glimpse phi from image x
@@ -174,10 +173,10 @@ class core_network(nn.Module):
     """
     def __init__(self):
         super(core_network, self).__init__()
-        self.lstm = nn.LSTMCell(4096, 1024)
+        self.rnn = nn.RNNCell(4096, 1024)
 
     def forward(self,x, h_t_prev):
-        h_t = self.lstm(x, h_t_prev)
+        h_t = self.rnn(x, h_t_prev)
         return h_t
 
 class action_network(nn.Module):
@@ -195,7 +194,7 @@ class action_network(nn.Module):
     """
     def __init__(self):
         super(action_network, self).__init__()
-        self.fc = nn.Linear(1024, 101)
+        self.fc = nn.Linear(1024, 3)
 
     def forward(self, h_t):
         a_t = F.log_softmax(self.fc(h_t), dim=1)

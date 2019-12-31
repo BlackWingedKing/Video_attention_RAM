@@ -14,10 +14,11 @@ class Path(object):
 
             # folder that contains class labels
             # /home/dipesh/Ram/ritesh/data/UCF-101/UCF-101
-            root_dir = "../data/UCF-101/UCF-101"
+            # root_dir = "../data/UCF-101/UCF-101"
+            root_dir = "../data/UCF-101/small_ucf101"
 
             # Save preprocess data into output_dir
-            output_dir = "../data/UCF-101/split_UCF101"
+            output_dir = "../data/UCF-101/small_ucf101"
 
             return root_dir, output_dir
         elif database == 'hmdb51':
@@ -83,8 +84,8 @@ class VideoDataset(Dataset):
         self.label_array = np.array([self.label2index[label] for label in labels], dtype=int)
 
         if dataset == "ucf101":
-            if not os.path.exists('ucf_labels.txt'):
-                with open('ucf_labels.txt', 'w') as f:
+            if not os.path.exists('ucf_labels_small.txt'):
+                with open('ucf_labels_small.txt', 'w') as f:
                     for id, label in enumerate(sorted(self.label2index)):
                         f.writelines(str(id+1) + ' ' + label + '\n')
 

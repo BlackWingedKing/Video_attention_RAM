@@ -155,8 +155,8 @@ def get_10x_lr_params(model):
             if k.requires_grad:
                 yield k
 
-if __name__ == "__main__":
-    inputs = torch.rand(1, 1, 6, 112, 112)
-    net = C3D(num_classes=101, pretrained=False )
+# if __name__ == "__main__":
+#     inputs = torch.rand(1, 1, 6, 112, 112)
+#     net = C3D(num_classes=3, pretrained=False )
 
-    outputs = net.forward(inputs)
+#     outputs = net.forward(inputs)
