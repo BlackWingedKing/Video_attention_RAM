@@ -10,7 +10,7 @@ import math
 import argparse
 # local imports
 from model import VRAM
-from data_loader import VideoDataset
+from data_loader_ucf101 import VideoDataset
 from torch.utils.data import DataLoader
 
 # gpu settings 
@@ -23,11 +23,11 @@ def init(B, T, k):
     # T is the time frames usually 30 and 
     # k is the number of glimpses
     h_t = torch.randn(B, 1024).to(device)
-    l_t = 2*(k/T) - 1.0
+    l_t = (2*(k/T) - 1.0)*torch.ones(B,1).to(device)
     return h_t, l_t
 
 def train(model, device, optimiser, epochs, train_loader, val_loader):
-    m = 10
+    m = 1
     k = 3
     ng = 3
     for e in range(epochs):
@@ -36,8 +36,9 @@ def train(model, device, optimiser, epochs, train_loader, val_loader):
             y = sample[1].to(device)
             x = x.repeat(m,1,1,1,1)
             B,C,T,H,W = x.shape
+            print(x.shape)
             h_t, l_t = init(B, T, k)
-
+            print(h_t.shape, l_t.shape)
             # extract the glimpses
             locs,log_pi,baselines = [],[],[]
 
@@ -48,7 +49,7 @@ def train(model, device, optimiser, epochs, train_loader, val_loader):
             # last iteration
             h_t, l_t, b_t, log_probas, p = model(x, l_t, h_t, last=True)
             locs.append(l_t), baselines.append(b_t), log_pi.append(p)
-
+            falsh()
             # convert list to tensors and reshape
             baselines = torch.stack(baselines).transpose(1, 0)
             log_pi = torch.stack(log_pi).transpose(1, 0)
@@ -138,7 +139,7 @@ def main():
     train_data = VideoDataset(dataset='ucf101', split='train', clip_len=30, preprocess=False)
     val_data = VideoDataset(dataset='ucf101', split='val', clip_len=30, preprocess=False)
     train_loader = DataLoader(train_data, batch_size=32, shuffle=True, num_workers=4)
-    val_loader = DataLoader(val_data, batch_size=32, shuflle=True, num_workers=4)
+    val_loader = DataLoader(val_data, batch_size=32, shuffle=True, num_workers=4)
 
     train(model, device, optimiser, nepochs, train_loader, val_loader)
 

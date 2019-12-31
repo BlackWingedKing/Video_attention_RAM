@@ -265,15 +265,15 @@ class VideoDataset(Dataset):
         return buffer
 
 # if __name__ == "__main__":
-    # from torch.utils.data import DataLoader
-    # train_data = VideoDataset(dataset='ucf101', split='train', clip_len=30, preprocess=False)
-    # train_loader = DataLoader(train_data, batch_size=100, shuffle=True, num_workers=4)
+#     from torch.utils.data import DataLoader
+#     train_data = VideoDataset(dataset='ucf101', split='train', clip_len=30, preprocess=False)
+#     train_loader = DataLoader(train_data, batch_size=100, shuffle=True, num_workers=4)
 
-    # for i, sample in enumerate(train_loader):
-    #     inputs = sample[0]
-    #     labels = sample[1]
-    #     print(inputs.size())
-    #     print(labels)
+#     for i, sample in enumerate(train_loader):
+#         inputs = sample[0]
+#         labels = sample[1]
+#         print(inputs.size())
+#         print(labels)
 
-    #     if i == 1:
-    #         break
+#         if i == 1:
+#             break

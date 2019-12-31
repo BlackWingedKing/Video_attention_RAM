@@ -7,7 +7,6 @@ from c3d_model import C3D
 
 # gpu settings 
 use_cuda = torch.cuda.is_available()
-print('gpu status ===',use_cuda)
 torch.cuda.manual_seed(0)
 device = torch.device("cuda" if use_cuda else "cpu")
 
@@ -46,13 +45,14 @@ class retina(object):
         # extract 2*k patches from the loc list
         B, C, T, H, W = x.shape        
         lv = self.denormalize(T,l)
-        loc = torch.arange(lv-self.k*self.s, lv+self.k*self.s+1, step=self.s)
+        
+        loc = torch.arange((lv-self.k*self.s).item(), (lv+self.k*self.s+1).item(), step=self.s)
         for i in loc:
             if(i != lv):
                 phi.append(self.extract_patch(x, lv, i))
 
         # concatenate into a single tensor and flatten
-        phi = torch.cat(phi, dim=1)
+        phi = torch.stack(phi, dim=1)
         return phi.unsqueeze(1)
 
     def extract_patch(self, x, a, b):
@@ -76,19 +76,18 @@ class retina(object):
         for i in range(B):
             im = x[i]
             a,b = self.exceed(a,b,T)
-
-            leftframe = (im[0,a,:,:,:]).cpu()
-            rightframe = (im[0,b,:,:,:]).cpu()
+            leftframe = (im[:,a,:,:]).cpu().permute(1,2,0)
+            rightframe = (im[:,b,:,:]).cpu().permute(1,2,0)
 
             leftframe = leftframe.numpy()
             rightframe = rightframe.numpy()
-
             leftgray = cv2.cvtColor(leftframe, cv2.COLOR_RGB2GRAY)
             rightgray = cv2.cvtColor(leftframe, cv2.COLOR_RGB2GRAY)
 
             # compute the flow
             flow = cv2.calcOpticalFlowFarneback(leftgray, rightgray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
             flow = torch.tensor(flow).to(device)
+            flow = torch.norm(flow, dim=-1)
             patch.append(flow)
 
         # concatenate into a single tensor

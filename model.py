@@ -13,7 +13,7 @@ class VRAM(nn.Module):
     def __init__(self):
         super(VRAM, self).__init__()
 
-        self.std = std
+        self.std = 0.1
         self.sensor = glimpse_network(3)
         self.rnn = core_network()
         self.locator = location_network(std=0.2)
@@ -56,7 +56,8 @@ class VRAM(nn.Module):
           output log probability vector over the classes.
         - log_pi: a vector of length (B,).
         """
-        g_t = self.sensor(x, l_t_prev)
+        with torch.no_grad():
+            g_t = self.sensor(x, l_t_prev)
         h_t = self.rnn(g_t, h_t_prev)
         mu, l_t = self.locator(h_t)
         b_t = self.baseliner(h_t).squeeze(dim=1)
