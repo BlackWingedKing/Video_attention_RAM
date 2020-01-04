@@ -13,7 +13,7 @@ class VRAM(nn.Module):
     def __init__(self):
         super(VRAM, self).__init__()
 
-        self.std = 0.1
+        self.std = 0.2
         self.sensor = glimpse_network(3)
         self.rnn = core_network()
         self.locator = location_network(std=0.2)

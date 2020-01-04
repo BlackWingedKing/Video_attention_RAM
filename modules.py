@@ -1,14 +1,42 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision import models
 import numpy as np
 import cv2
 from c3d_model import C3D
-
-# gpu settings 
+from cbam import *
+import os
+# gpu settings
 use_cuda = torch.cuda.is_available()
 torch.cuda.manual_seed(0)
 device = torch.device("cuda" if use_cuda else "cpu")
+
+resnet = models.wide_resnet50_2(pretrained=True)
+
+# for i in resnet.children():
+# 	print(i)
+
+# list_pre = list(resnet.children())[:-3]
+# list_post = list(resnet.children())[-3:]
+
+# print("pre",list_pre)
+# print("###############################################################")
+# print(list_post)
+# print(resnet.children().shape)
+
+# exit()
+class wresnet_base(nn.Module):
+    def __init__(self):
+        super(wresnet_base, self).__init__()
+        self.features1 = nn.Sequential(*list(resnet.children())[:-3])
+        self.cbam = CBAM( 1024, 16 )
+        self.features2 = nn.Sequential(*list(resnet.children())[-3:-1])
+    def forward(self, x):
+        x = self.features1(x)
+        x = self.cbam(x)
+        x = self.features2(x)
+        return x
 
 class retina(object):
     """
@@ -108,6 +136,50 @@ class retina(object):
             b = T-1
         return a,b
 
+# class glimpse_network1(nn.Module):
+#     """
+#         `g_t = relu( fc( fc(l) ) + fc( fc(phi) ) )`
+
+#     Args
+#     ----
+#     - h_g: hidden layer size of the fc layer for `phi`.
+#     - h_l: hidden layer size of the fc layer for `l`.
+#     - k: number of patches to extract per glimpse.
+#     - s: skip factor.
+#     - x: a 5D Tensor of shape (B, 1, D, H, W). The minibatch
+#       of images.
+#     - l_t_prev: a 2D tensor of shape (B, 1). Contains the time
+#       frame t.
+
+#     Returns
+#     -------
+#     - g_t: a 2D tensor of shape (B, hidden_size). The glimpse
+#       representation returned by the glimpse network for the
+#       current timestep `t`.
+#     """
+#     def __init__(self, k, s=1):
+#         super(glimpse_network, self).__init__()
+#         self.retina = retina(k, s)
+#         self.c3d = C3D(3,pretrained=False)
+
+#     def forward(self, x, l_t_prev):
+#         # generate glimpse phi from image x
+#         phi = self.retina.foveate(x, l_t_prev)
+#         phi = self.c3d(phi)
+#         # phi = self.conv1(phi)
+#         # phi = phi.view(phi.shape[0],-1)
+        
+#         # # flatten location vector
+#         # l_t_prev = l_t_prev.view(l_t_prev.size(0), -1)
+
+#         # # feed phi and l to respective fc layers
+#         # phi_out = F.relu(self.bn1(self.fhc1(self.fc1(phi))))
+#         # l_out = F.relu(self.bn2(self.fc2(l_t_prev)))
+
+#         # # feed to fc layer
+#         # g_t = F.relu(self.fc3(phi_out) + self.fc4(l_out))
+#         return phi
+
 class glimpse_network(nn.Module):
     """
         `g_t = relu( fc( fc(l) ) + fc( fc(phi) ) )`
@@ -131,26 +203,27 @@ class glimpse_network(nn.Module):
     """
     def __init__(self, k, s=1):
         super(glimpse_network, self).__init__()
-        self.retina = retina(k, s)
-        self.c3d = C3D(3,pretrained=False)
-
+        self.res = wresnet_base()
+        
     def forward(self, x, l_t_prev):
         # generate glimpse phi from image x
-        phi = self.retina.foveate(x, l_t_prev)
-        phi = self.c3d(phi)
-        # phi = self.conv1(phi)
-        # phi = phi.view(phi.shape[0],-1)
-        
-        # # flatten location vector
-        # l_t_prev = l_t_prev.view(l_t_prev.size(0), -1)
+        # since the glimpse is B,C,T,H,W generate of size 2048
+        B,C,T,H,W = x.shape
+        inp = []
+        lv = self.denormalize(T,l_t_prev).long()
+        for i in range(B):
+            inp.append(x[i,:,lv[i].item()])
+        inpx = torch.stack(inp,dim=0).to(device)
+        phi = self.res(inpx)
+        return phi.view(-1,2048)
 
-        # # feed phi and l to respective fc layers
-        # phi_out = F.relu(self.bn1(self.fhc1(self.fc1(phi))))
-        # l_out = F.relu(self.bn2(self.fc2(l_t_prev)))
-
-        # # feed to fc layer
-        # g_t = F.relu(self.fc3(phi_out) + self.fc4(l_out))
-        return phi
+    def denormalize(self, T, coords):
+        """
+        Convert coordinates in the range [-1, 1] to
+        coordinates in the range [0, T] where `T` is
+        the length of the video sequence.
+        """
+        return (0.5 * ((coords + 1.0) * T)).long()
 
 class core_network(nn.Module):
     """
@@ -173,7 +246,7 @@ class core_network(nn.Module):
     """
     def __init__(self):
         super(core_network, self).__init__()
-        self.rnn = nn.RNNCell(4096, 1024)
+        self.rnn = nn.GRUCell(2048, 1024)
 
     def forward(self,x, h_t_prev):
         h_t = self.rnn(x, h_t_prev)
@@ -194,11 +267,14 @@ class action_network(nn.Module):
     """
     def __init__(self):
         super(action_network, self).__init__()
-        self.fc = nn.Linear(1024, 3)
-
-    def forward(self, h_t):
-        a_t = F.log_softmax(self.fc(h_t), dim=1)
-        return a_t
+        self.fc1 = nn.Linear(1024, 512)
+        self.fc2 = nn.Linear(512, 101)
+        self.relu = nn.ReLU()
+    
+    def forward(self, x):
+        x = self.relu(self.fc1(x))
+        x = F.log_softmax(x,dim=-1)
+        return x
 
 class location_network(nn.Module):
     """
@@ -218,11 +294,14 @@ class location_network(nn.Module):
     def __init__(self, std):
         super(location_network, self).__init__()
         self.std = std
-        self.fc = nn.Linear(1024, 1)
+        self.fc1 = nn.Linear(1024, 512)
+        self.fc2 = nn.Linear(512, 1)
+        self.relu = nn.ReLU()
 
-    def forward(self, h_t):
+    def forward(self, x):
         # compute mean
-        mu = torch.tanh(self.fc(h_t.detach()))
+        x = self.relu(self.fc1(x))
+        mu = torch.tanh(self.fc2(x))
 
         # reparametrization trick
         noise = torch.zeros_like(mu)

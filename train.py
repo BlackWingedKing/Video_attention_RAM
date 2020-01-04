@@ -13,9 +13,11 @@ from model import VRAM
 from data_loader_ucf101 import VideoDataset
 from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
+import os
 
-writer = SummaryWriter()
+writer = SummaryWriter('tensorboard/gru_resnet_cbam')
 # gpu settings 
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 use_cuda = torch.cuda.is_available()
 print('gpu status ===',use_cuda)
 torch.cuda.manual_seed(0)
@@ -30,8 +32,8 @@ def init(B, T, k):
 
 def train(model, device, optimiser, epochs, train_loader, val_loader):
     m = 10 # monte carlo sampling factor
-    k = 3
-    ng = 3
+    k = 0
+    ng = 7
     for e in range(epochs):
         tic = time.time()
         r_loss,a_loss,b_loss,acc = 0.0,0.0,0.0,0.0
@@ -95,7 +97,6 @@ def train(model, device, optimiser, epochs, train_loader, val_loader):
             optimiser.zero_grad()
             loss.backward()
             optimiser.step()
-    
         writer.add_scalar('train_acc',acc/len(train_loader),e)
         writer.add_scalar('train_r loss',r_loss/len(train_loader),e)
         writer.add_scalar('train_a_loss',a_loss/len(train_loader),e)
@@ -106,15 +107,18 @@ def train(model, device, optimiser, epochs, train_loader, val_loader):
         print('epoch:',e,' completed', 'time taken:',time.time() - tic)
 
 def validate(model, device, val_loader,e):
-    m = 10 # monte carlo sampling factor
-    k = 3
-    ng = 3
+    m = 1 # monte carlo sampling factor
+    k = 0
+    ng = 7
     with torch.no_grad():
         r_loss,a_loss,b_loss,acc = 0.0,0.0,0.0,0.0
         for i,sample in enumerate(val_loader):
             tic = time.time()
             x = sample[0].to(device)
+            # print("x.shape",x.shape)
             y = sample[1].to(device)
+            # print("y.shape",y.shape)
+            # print("_____________________________")
             x = x.repeat(m,1,1,1,1)
             B,C,T,H,W = x.shape
             h_t, l_t = init(B, T, k)
@@ -177,9 +181,9 @@ def validate(model, device, val_loader,e):
 def main():
     # Training settings
     parser = argparse.ArgumentParser()
-    parser.add_argument("--epochs", type=int, default=150,help='nepochs')
+    parser.add_argument("--epochs", type=int, default=200,help='nepochs')
     parser.add_argument("--LR", type=float, default=1e-3,help='learning rate')
-    parser.add_argument("--batch", type=float, default=1e-3,help='learning rate')
+    parser.add_argument("--batch", type=float, default=64,help='learning rate')
 
     args = parser.parse_args()
 
@@ -190,10 +194,12 @@ def main():
 
     train_data = VideoDataset(dataset='ucf101', split='train', clip_len=30, preprocess=False)
     val_data = VideoDataset(dataset='ucf101', split='val', clip_len=30, preprocess=False)
-    train_loader = DataLoader(train_data, batch_size=16, shuffle=True, num_workers=4)
-    val_loader = DataLoader(val_data, batch_size=16, shuffle=True, num_workers=4)
+    train_loader = DataLoader(train_data, batch_size=64, shuffle=True, num_workers=4)
+    val_loader = DataLoader(val_data, batch_size=64, shuffle=True, num_workers=0)
 
     train(model, device, optimiser, nepochs, train_loader, val_loader)
+    # validate(model, device, val_loader, 1)
+
     writer.export_scalars_to_json("metrics.json")
     writer.close()
 

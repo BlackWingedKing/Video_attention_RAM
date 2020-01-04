@@ -1,13 +1,12 @@
 import os
 from sklearn.model_selection import train_test_split
-
 import torch
 import cv2
 import numpy as np
 from torch.utils.data import Dataset
 # from mypath import Path
 
-label_txt_file ='old_split.txt'
+
 class Path(object):
     @staticmethod
     def db_dir(database):
@@ -15,11 +14,12 @@ class Path(object):
 
             # folder that contains class labels
             # /home/dipesh/Ram/ritesh/data/UCF-101/UCF-101
-            root_dir = "../data/UCF-101/split_UCF101"
+            #/home/dipesh/ritesh/data/UCF-101/UCF-101
+            root_dir = "../data/UCF-101/UCF-101"
             # root_dir = "../data/UCF-101/small_ucf101"
 
             # Save preprocess data into output_dir
-            output_dir = root_dir # if no preprocessing
+            output_dir = "../data/UCF-101/16_frames_split" # if no preprocessing
             # output_dir = "../data/UCF-101/small_ucf101"
 
             return root_dir, output_dir
@@ -50,7 +50,7 @@ class VideoDataset(Dataset):
             preprocess (bool): Determines whether to preprocess dataset. Default is False.
     """
 
-    def __init__(self, dataset='ucf101', split='train', clip_len=30, preprocess=False):
+    def __init__(self, dataset='ucf101', split='train', clip_len=16, preprocess=False):
         self.root_dir, self.output_dir = Path.db_dir(dataset)
         folder = os.path.join(self.output_dir, split)
         self.clip_len = clip_len
@@ -103,18 +103,7 @@ class VideoDataset(Dataset):
 
     def __getitem__(self, index):
         # Loading and preprocessing.
-        buffer, frame_count = self.load_frames(self.fnames[index])
-        # print("index",index)
-
-        while frame_count<30:
-            buffer, frame_count = self.load_frames(self.fnames[index])
-            index = index+1
-        # if frame_count<=30:
-            # print("---------")
-            # print("frame_count",frame_count)
-            # print("index",index)
-            # print("---------")
-
+        buffer = self.load_frames(self.fnames[index])
         buffer = self.crop(buffer, self.clip_len, self.crop_size)
         labels = np.array(self.label_array[index])
 
@@ -165,28 +154,33 @@ class VideoDataset(Dataset):
             file_path = os.path.join(self.root_dir, file)
             video_files = [name for name in os.listdir(file_path)]
 
-            train_and_valid, test = train_test_split(video_files, test_size=0.2, random_state=42)
-            train, val = train_test_split(train_and_valid, test_size=0.2, random_state=42)
+            # train_and_valid, test = train_test_split(video_files, test_size=0.0, random_state=42)
+            # train, val = train_test_split(train_and_valid, test_size=0.0, random_state=42)
 
-            train_dir = os.path.join(self.output_dir, 'train', file)
-            val_dir = os.path.join(self.output_dir, 'val', file)
-            test_dir = os.path.join(self.output_dir, 'test', file)
+            # train_dir = os.path.join(self.output_dir, 'train', file)
+            # val_dir = os.path.join(self.output_dir, 'val', file)
+            # test_dir = os.path.join(self.output_dir, 'test', file)
 
-            if not os.path.exists(train_dir):
-                os.mkdir(train_dir)
-            if not os.path.exists(val_dir):
-                os.mkdir(val_dir)
-            if not os.path.exists(test_dir):
-                os.mkdir(test_dir)
+            save_dir = os.path.join(self.output_dir, 'complete_data', file)
 
-            for video in train:
-                self.process_video(video, file, train_dir)
+            # if not os.path.exists(train_dir):
+            #     os.mkdir(train_dir)
+            # if not os.path.exists(val_dir):
+            #     os.mkdir(val_dir)
+            # if not os.path.exists(test_dir):
+            #     os.mkdir(test_dir)
 
-            for video in val:
-                self.process_video(video, file, val_dir)
+            for video in video_files:
+                self.process_video(video, file, save_dir)
 
-            for video in test:
-                self.process_video(video, file, test_dir)
+            # for video in train:
+            #     self.process_video(video, file, train_dir)
+
+            # for video in val:
+            #     self.process_video(video, file, val_dir)
+
+            # for video in test:
+            #     self.process_video(video, file, test_dir)
 
         print('Preprocessing finished.')
 
@@ -204,11 +198,11 @@ class VideoDataset(Dataset):
 
         # Make sure splited video has at least 16 frames
         EXTRACT_FREQUENCY = 4
-        if frame_count // EXTRACT_FREQUENCY <= 30:
+        if frame_count // EXTRACT_FREQUENCY <= 16:
             EXTRACT_FREQUENCY -= 1
-            if frame_count // EXTRACT_FREQUENCY <= 30:
+            if frame_count // EXTRACT_FREQUENCY <= 16:
                 EXTRACT_FREQUENCY -= 1
-                if frame_count // EXTRACT_FREQUENCY <= 30:
+                if frame_count // EXTRACT_FREQUENCY <= 16:
                     EXTRACT_FREQUENCY -= 1
 
         count = 0
@@ -259,19 +253,11 @@ class VideoDataset(Dataset):
             frame = np.array(cv2.imread(frame_name)).astype(np.float64)
             buffer[i] = frame
 
-        return buffer, frame_count
+        return buffer
 
     def crop(self, buffer, clip_len, crop_size):
         # randomly select time index for temporal jittering
-        if buffer.shape[0]<=30:
-            # print(buffer.shape[0] - clip_len)
-            time_index = 0
-            # print("-time id-",time_index)
-        else:
-            # print("-----",buffer.shape[0] - clip_len)
-            time_index = np.random.randint(buffer.shape[0] - clip_len)
-            # print("-time id-",time_index)
-
+        time_index = np.random.randint(buffer.shape[0] - clip_len)
 
         # Randomly select start indices in order to crop the video
         height_index = np.random.randint(buffer.shape[1] - crop_size)
@@ -286,16 +272,20 @@ class VideoDataset(Dataset):
 
         return buffer
 
-# if __name__ == "__main__":
-#     from torch.utils.data import DataLoader
-#     train_data = VideoDataset(dataset='ucf101', split='train', clip_len=30, preprocess=False)
-#     train_loader = DataLoader(train_data, batch_size=100, shuffle=True, num_workers=4)
 
-#     for i, sample in enumerate(train_loader):
-#         inputs = sample[0]
-#         labels = sample[1]
-#         print(inputs.size())
-#         print(labels)
 
-#         if i == 1:
-#             break
+
+
+if __name__ == "__main__":
+    from torch.utils.data import DataLoader
+    train_data = VideoDataset(dataset='ucf101', split='test', clip_len=16, preprocess=True)
+    train_loader = DataLoader(train_data, batch_size=100, shuffle=True, num_workers=4)
+
+    for i, sample in enumerate(train_loader):
+        inputs = sample[0]
+        labels = sample[1]
+        print(inputs.size())
+        print(labels)
+
+        if i == 1:
+            break

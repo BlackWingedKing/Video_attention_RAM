@@ -22,6 +22,6 @@ import os
 a =os.listdir("../data/UCF-101/UCF-101")
 for z in a:
 	print(z)
-	os.mkdir("../data/UCF-101/out/{}".format(str(z)))
+	os.mkdir("../data/UCF-101/16_frames_split/complete_data/{}".format(str(z)))
 	# print(os.cwd())
 
